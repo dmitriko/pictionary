@@ -17,9 +17,10 @@ const (
 )
 
 const (
-	NOBODY_WON  = "Nobody won."
-	LAST_LINE   = "Game ended!"
-	WINNER_TMPL = "Player %s is the winner! The correct guess: %s."
+	NOBODY_WON       = "Nobody won."
+	LAST_LINE        = "Game ended!"
+	WINNER_TMPL      = "Player %s is the winner! The correct guess: %s."
+	WRONG_GUESS_TMPL = "Wrong guess: %s."
 )
 
 type GameConfig struct {
@@ -43,7 +44,7 @@ type GameSession struct {
 	Image        *Image
 	Status       int
 	Done         chan bool
-	In           <-chan Guess
+	In           <-chan *Guess
 	Out          chan<- string
 	CurrentLine  int
 	SentLines    []string
@@ -52,6 +53,8 @@ type GameSession struct {
 type Guess struct {
 	UserName  string
 	ImageName string
+	OK        bool
+	Resp      string
 }
 
 func NewGame(conf GameConfig) (*Game, error) {
@@ -84,7 +87,7 @@ func (g *Game) LoadImages() error {
 	return nil
 }
 
-func (g *Game) NewSession(ctx context.Context, in chan Guess, out chan string) (*GameSession, error) {
+func (g *Game) NewSession(ctx context.Context, in chan *Guess, out chan string) (*GameSession, error) {
 	rand.Seed(time.Now().Unix())
 	s := &GameSession{
 		ctx:          ctx,
@@ -111,6 +114,9 @@ func (s *GameSession) Start() {
 				s.SentLines = append(s.SentLines, LAST_LINE)
 				s.Done <- true
 				return
+			} else {
+				guess.OK = false
+				guess.Resp = fmt.Sprintf(WRONG_GUESS_TMPL, strings.TrimSpace(guess.ImageName))
 			}
 		case <-ticker.C:
 			if len(s.Image.Lines) <= s.CurrentLine {

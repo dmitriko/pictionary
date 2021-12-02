@@ -33,7 +33,7 @@ func TestNobodyWon(t *testing.T) {
 	assert.Nil(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Millisecond*500))
 	defer cancel()
-	guessChan := make(chan Guess)
+	guessChan := make(chan *Guess)
 	outChan := make(chan string)
 	s, err := g.NewSession(ctx, guessChan, outChan)
 	assert.Nil(t, err)
@@ -61,7 +61,7 @@ func TestUserWins(t *testing.T) {
 	assert.Nil(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Millisecond*500))
 	defer cancel()
-	guessChan := make(chan Guess)
+	guessChan := make(chan *Guess)
 	outChan := make(chan string)
 	s, err := g.NewSession(ctx, guessChan, outChan)
 	assert.Nil(t, err)
@@ -72,7 +72,10 @@ func TestUserWins(t *testing.T) {
 	}()
 	go s.Start()
 	go func() {
-		guessChan <- Guess{"foo", s.Image.Name}
+		guessChan <- &Guess{
+			UserName:  "foo",
+			ImageName: s.Image.Name,
+		}
 	}()
 	select {
 	case <-ctx.Done():
@@ -82,4 +85,31 @@ func TestUserWins(t *testing.T) {
 	}
 	resp := fmt.Sprintf(WINNER_TMPL, "foo", s.Image.Name)
 	assert.Equal(t, resp, s.SentLines[len(s.SentLines)-2])
+}
+
+func TestUserWrong(t *testing.T) {
+	conf := GameConfig{
+		ImagesPath: "test_data/asciiImages",
+		TickPeriod: 1000,
+	}
+	g, err := NewGame(conf)
+	assert.Nil(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Millisecond*500))
+	guessChan := make(chan *Guess)
+	outChan := make(chan string)
+	s, err := g.NewSession(ctx, guessChan, outChan)
+	assert.Nil(t, err)
+	go func() {
+		for {
+			<-outChan
+		}
+	}()
+	go s.Start()
+	guess := &Guess{
+		UserName:  "foo",
+		ImageName: "bar",
+	}
+	guessChan <- guess
+	cancel()
+	assert.Equal(t, fmt.Sprintf(WRONG_GUESS_TMPL, "bar"), guess.Resp)
 }
