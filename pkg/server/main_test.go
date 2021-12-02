@@ -36,9 +36,10 @@ func TestNewGameSession(t *testing.T) {
 	outChan := make(chan string)
 	s, err := g.NewSession(ctx, guessChan, outChan)
 	assert.Nil(t, err)
+	var outLine string
 	go func() {
 		for {
-			<-outChan
+			outLine = <-outChan
 		}
 	}()
 	go s.Start()
