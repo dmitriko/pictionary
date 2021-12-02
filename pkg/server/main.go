@@ -92,9 +92,10 @@ func (g *Game) LoadImages() error {
 
 func (g *Game) NewSession(ctx context.Context) (*GameSession, error) {
 	rand.Seed(time.Now().Unix())
+	dur := time.Duration(g.conf.TickPeriod) * time.Millisecond
 	s := &GameSession{
 		ctx:          ctx,
-		TickDuration: time.Duration(g.conf.TickPeriod),
+		TickDuration: dur,
 		Image:        g.Images[rand.Intn(len(g.Images))],
 		Done:         make(chan bool),
 		In:           make(chan *Guess),
@@ -109,7 +110,7 @@ func (s *GameSession) Start() {
 		select {
 		case <-s.ctx.Done():
 			return
-		case guess := <-s.In:
+		case guess := <-s.In: //got a guess from user
 			if strings.TrimSpace(guess.ImageName) == s.Image.Name {
 				s.Out <- fmt.Sprintf(WINNER_TMPL, guess.UserName, s.Image.Name)
 				s.Out <- LAST_LINE
@@ -121,7 +122,7 @@ func (s *GameSession) Start() {
 				guess.OK = false
 				guess.Resp = fmt.Sprintf(WRONG_GUESS_TMPL, strings.TrimSpace(guess.ImageName))
 			}
-		case <-ticker.C:
+		case <-ticker.C: // it's time to send next line
 			if len(s.Image.Lines) <= s.CurrentLine {
 				s.Out <- NOBODY_WON
 				s.Out <- LAST_LINE
@@ -162,8 +163,7 @@ func (us *UserSession) Start() {
 		case msg := <-fromUser:
 			if us.UserName == "" && msg != "" {
 				us.UserName = msg
-			}
-			if us.UserName != "" && msg != "" {
+			} else if us.UserName != "" && msg != "" {
 				us.Out <- &Guess{UserName: us.UserName, ImageName: msg}
 			}
 		case toUser := <-us.In:
@@ -197,12 +197,14 @@ func (s *Server) MustWaitAndStartGame() {
 	for {
 		for _, us := range s.UserSessions {
 			if us.UserName != "" {
-				break
+				fmt.Printf("Starting game for %s", us.UserName)
+				s.StartGame(gameSession)
+				return
 			}
 		}
 		time.Sleep(1 * time.Second)
 	}
-	s.StarGame(gameSession)
+
 }
 
 func (s *Server) SendMsgUsers(msg string) {
@@ -224,9 +226,7 @@ func (s *Server) StartGame(gameSession *GameSession) {
 				gameSession.In <- guess
 			}
 		case msg := <-gameSession.Out:
-			for _, us := range s.UserSessions {
-				us.In <- msg
-			}
+			s.SendMsgUsers(msg)
 		}
 	}
 }
