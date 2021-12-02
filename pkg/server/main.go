@@ -90,15 +90,15 @@ func (g *Game) LoadImages() error {
 	return nil
 }
 
-func (g *Game) NewSession(ctx context.Context, in chan *Guess, out chan string) (*GameSession, error) {
+func (g *Game) NewSession(ctx context.Context) (*GameSession, error) {
 	rand.Seed(time.Now().Unix())
 	s := &GameSession{
 		ctx:          ctx,
 		TickDuration: time.Duration(g.conf.TickPeriod),
 		Image:        g.Images[rand.Intn(len(g.Images))],
 		Done:         make(chan bool),
-		In:           in,
-		Out:          out,
+		In:           make(chan *Guess),
+		Out:          make(chan string),
 	}
 	return s, nil
 }
@@ -192,10 +192,8 @@ func (s *Server) MustWaitAndStartGame() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	toGame := make(chan *Guess)
-	fromGame := make(chan string)
 
-	gameSession, err := game.NewSession(s.ctx, toGame, fromGame)
+	gameSession, err := game.NewSession(s.ctx)
 	for {
 		for _, us := range s.UserSessions {
 			if us.UserName != "" {

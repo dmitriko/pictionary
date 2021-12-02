@@ -33,13 +33,11 @@ func TestNobodyWon(t *testing.T) {
 	assert.Nil(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Millisecond*500))
 	defer cancel()
-	guessChan := make(chan *Guess)
-	outChan := make(chan string)
-	s, err := g.NewSession(ctx, guessChan, outChan)
+	s, err := g.NewSession(ctx)
 	assert.Nil(t, err)
 	go func() {
 		for {
-			<-outChan
+			<-s.Out
 		}
 	}()
 	go s.Start()
@@ -61,18 +59,16 @@ func TestUserWins(t *testing.T) {
 	assert.Nil(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Millisecond*500))
 	defer cancel()
-	guessChan := make(chan *Guess)
-	outChan := make(chan string)
-	s, err := g.NewSession(ctx, guessChan, outChan)
+	s, err := g.NewSession(ctx)
 	assert.Nil(t, err)
 	go func() {
 		for {
-			<-outChan
+			<-s.Out
 		}
 	}()
 	go s.Start()
 	go func() {
-		guessChan <- &Guess{
+		s.In <- &Guess{
 			UserName:  "foo",
 			ImageName: s.Image.Name,
 		}
@@ -95,13 +91,11 @@ func TestUserWrong(t *testing.T) {
 	g, err := NewGame(conf)
 	assert.Nil(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Millisecond*500))
-	guessChan := make(chan *Guess)
-	outChan := make(chan string)
-	s, err := g.NewSession(ctx, guessChan, outChan)
+	s, err := g.NewSession(ctx)
 	assert.Nil(t, err)
 	go func() {
 		for {
-			<-outChan
+			<-s.Out
 		}
 	}()
 	go s.Start()
@@ -109,7 +103,7 @@ func TestUserWrong(t *testing.T) {
 		UserName:  "foo",
 		ImageName: "bar",
 	}
-	guessChan <- guess
+	s.In <- guess
 	cancel()
 	assert.Equal(t, fmt.Sprintf(WRONG_GUESS_TMPL, "bar"), guess.Resp)
 }
