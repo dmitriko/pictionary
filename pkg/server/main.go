@@ -202,6 +202,16 @@ func (s *Server) MustWaitAndStartGame() {
 		}
 		time.Sleep(1 * time.Second)
 	}
+	s.StarGame(gameSession)
+}
+
+func (s *Server) SendMsgUsers(msg string) {
+	for _, us := range s.UserSessions {
+		s.SendMsgUser(us.UserName, msg)
+	}
+}
+
+func (s *Server) StartGame(gameSession *GameSession) {
 	go gameSession.Start()
 	for {
 		select {
@@ -209,7 +219,7 @@ func (s *Server) MustWaitAndStartGame() {
 			return
 		case guess := <-s.fromUsers:
 			if guess.ImageName != gameSession.Image.Name {
-				s.UserSendMsg(guess.UserName, fmt.Sprintf(WRONG_GUESS_TMPL, guess.ImageName))
+				s.SendMsgUser(guess.UserName, fmt.Sprintf(WRONG_GUESS_TMPL, guess.ImageName))
 			} else {
 				gameSession.In <- guess
 			}
@@ -221,9 +231,15 @@ func (s *Server) MustWaitAndStartGame() {
 	}
 }
 
-func (s *Server) UserSendMsg(userName, imageName string) {
+func (s *Server) SendMsgUser(userName, msg string) {
+	for _, us := range s.UserSessions {
+		if us.UserName == userName {
+			us.In <- msg
+		}
 
+	}
 }
+
 func (s *Server) Start(ctx context.Context) error {
 	ln, err := net.Listen("tcp", s.Address)
 	if err != nil {
