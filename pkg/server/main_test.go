@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -23,7 +24,7 @@ func TestNewGame(t *testing.T) {
 	assert.NotNil(t, err)
 }
 
-func TestNewGameSession(t *testing.T) {
+func TestNobodyWon(t *testing.T) {
 	conf := GameConfig{
 		ImagesPath: "test_data/asciiImages",
 		TickPeriod: 1,
@@ -36,10 +37,9 @@ func TestNewGameSession(t *testing.T) {
 	outChan := make(chan string)
 	s, err := g.NewSession(ctx, guessChan, outChan)
 	assert.Nil(t, err)
-	var outLine string
 	go func() {
 		for {
-			outLine = <-outChan
+			<-outChan
 		}
 	}()
 	go s.Start()
@@ -49,5 +49,37 @@ func TestNewGameSession(t *testing.T) {
 	case done := <-s.Done:
 		assert.True(t, done)
 	}
+	assert.Equal(t, NOBODY_WON, s.SentLines[len(s.SentLines)-2])
+}
 
+func TestUserWins(t *testing.T) {
+	conf := GameConfig{
+		ImagesPath: "test_data/asciiImages",
+		TickPeriod: 1000,
+	}
+	g, err := NewGame(conf)
+	assert.Nil(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Millisecond*500))
+	defer cancel()
+	guessChan := make(chan Guess)
+	outChan := make(chan string)
+	s, err := g.NewSession(ctx, guessChan, outChan)
+	assert.Nil(t, err)
+	go func() {
+		for {
+			<-outChan
+		}
+	}()
+	go s.Start()
+	go func() {
+		guessChan <- Guess{"foo", s.Image.Name}
+	}()
+	select {
+	case <-ctx.Done():
+		assert.Nil(t, ctx.Err())
+	case done := <-s.Done:
+		assert.True(t, done)
+	}
+	resp := fmt.Sprintf(WINNER_TMPL, "foo", s.Image.Name)
+	assert.Equal(t, resp, s.SentLines[len(s.SentLines)-2])
 }

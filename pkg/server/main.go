@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"path/filepath"
@@ -13,6 +14,12 @@ const (
 	NotStarted = iota
 	Started
 	Ended
+)
+
+const (
+	NOBODY_WON  = "Nobody won."
+	LAST_LINE   = "Game ended!"
+	WINNER_TMPL = "Player %s is the winner! The correct guess: %s."
 )
 
 type GameConfig struct {
@@ -39,6 +46,7 @@ type GameSession struct {
 	In           <-chan Guess
 	Out          chan<- string
 	CurrentLine  int
+	SentLines    []string
 }
 
 type Guess struct {
@@ -95,12 +103,27 @@ func (s *GameSession) Start() {
 		select {
 		case <-s.ctx.Done():
 			return
+		case guess := <-s.In:
+			if strings.TrimSpace(guess.ImageName) == s.Image.Name {
+				s.Out <- fmt.Sprintf(WINNER_TMPL, guess.UserName, s.Image.Name)
+				s.Out <- LAST_LINE
+				s.SentLines = append(s.SentLines, fmt.Sprintf(WINNER_TMPL, guess.UserName, s.Image.Name))
+				s.SentLines = append(s.SentLines, LAST_LINE)
+				s.Done <- true
+				return
+			}
 		case <-ticker.C:
 			if len(s.Image.Lines) <= s.CurrentLine {
-				s.Out <- "Nobody wins."
+				s.Out <- NOBODY_WON
+				s.Out <- LAST_LINE
+				s.SentLines = append(s.SentLines, NOBODY_WON)
+				s.SentLines = append(s.SentLines, LAST_LINE)
 				s.Done <- true
+				return
 			} else {
-				s.Out <- s.Image.Lines[s.CurrentLine]
+				line := s.Image.Lines[s.CurrentLine]
+				s.SentLines = append(s.SentLines, line)
+				s.Out <- line
 				s.CurrentLine++
 			}
 
