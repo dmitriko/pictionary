@@ -47,7 +47,7 @@ func TestNobodyWon(t *testing.T) {
 	case done := <-s.Done:
 		assert.True(t, done)
 	}
-	assert.Equal(t, NOBODY_WON, s.SentLines[len(s.SentLines)-2])
+	assert.Equal(t, fmt.Sprintf(NOBODY_WON_TMPL, s.Image.Name), s.SentLines[len(s.SentLines)-2])
 }
 
 func TestUserWins(t *testing.T) {

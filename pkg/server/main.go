@@ -20,7 +20,7 @@ const (
 )
 
 const (
-	NOBODY_WON       = "Nobody won."
+	NOBODY_WON_TMPL  = "Nobody won. It was %s."
 	LAST_LINE        = "Game ended!"
 	WINNER_TMPL      = "Player %s is the winner! The correct guess: %s."
 	WRONG_GUESS_TMPL = "Wrong guess: %s."
@@ -111,6 +111,7 @@ func (s *GameSession) Start() {
 		case <-s.ctx.Done():
 			return
 		case guess := <-s.In: //got a guess from user
+			fmt.Println(strings.TrimSpace(guess.ImageName), s.Image.Name)
 			if strings.TrimSpace(guess.ImageName) == s.Image.Name {
 				s.Out <- fmt.Sprintf(WINNER_TMPL, guess.UserName, s.Image.Name)
 				s.Out <- LAST_LINE
@@ -124,9 +125,9 @@ func (s *GameSession) Start() {
 			}
 		case <-ticker.C: // it's time to send next line
 			if len(s.Image.Lines) <= s.CurrentLine {
-				s.Out <- NOBODY_WON
+				s.Out <- fmt.Sprintf(NOBODY_WON_TMPL, s.Image.Name)
 				s.Out <- LAST_LINE
-				s.SentLines = append(s.SentLines, NOBODY_WON)
+				s.SentLines = append(s.SentLines, fmt.Sprintf(NOBODY_WON_TMPL, s.Image.Name))
 				s.SentLines = append(s.SentLines, LAST_LINE)
 				s.Done <- true
 				return
@@ -152,8 +153,10 @@ type UserSession struct {
 func (us *UserSession) Start() {
 	fromUser := make(chan string)
 	go func(fromUser chan string) {
-		msg, _ := bufio.NewReader(us.conn).ReadString('\n')
-		fromUser <- msg
+		for {
+			msg, _ := bufio.NewReader(us.conn).ReadString('\n')
+			fromUser <- msg
+		}
 	}(fromUser)
 
 	for {
@@ -161,6 +164,7 @@ func (us *UserSession) Start() {
 		case <-us.ctx.Done():
 			return
 		case msg := <-fromUser:
+			fmt.Println("Got msg form user", msg)
 			if us.UserName == "" && msg != "" {
 				us.UserName = msg
 			} else if us.UserName != "" && msg != "" {
@@ -186,7 +190,7 @@ type Server struct {
 func (s *Server) MustWaitAndStartGame() {
 	conf := GameConfig{
 		ImagesPath: s.ImagesPath,
-		TickPeriod: 1000, // 1 sec
+		TickPeriod: 3000, // 1 sec
 	}
 	game, err := NewGame(conf)
 	if err != nil {
@@ -220,7 +224,8 @@ func (s *Server) StartGame(gameSession *GameSession) {
 		case <-s.ctx.Done():
 			return
 		case guess := <-s.fromUsers:
-			if guess.ImageName != gameSession.Image.Name {
+			fmt.Println("Guess from user", guess.UserName, guess.ImageName)
+			if strings.TrimSpace(guess.ImageName) != gameSession.Image.Name {
 				s.SendMsgUser(guess.UserName, fmt.Sprintf(WRONG_GUESS_TMPL, guess.ImageName))
 			} else {
 				gameSession.In <- guess
