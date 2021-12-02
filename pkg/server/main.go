@@ -1,10 +1,13 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"math/rand"
+	"net"
 	"path/filepath"
 	"strings"
 	"time"
@@ -44,8 +47,8 @@ type GameSession struct {
 	Image        *Image
 	Status       int
 	Done         chan bool
-	In           <-chan *Guess
-	Out          chan<- string
+	In           chan *Guess
+	Out          chan string
 	CurrentLine  int
 	SentLines    []string
 }
@@ -134,5 +137,131 @@ func (s *GameSession) Start() {
 			}
 
 		}
+	}
+}
+
+type UserSession struct {
+	ctx      context.Context
+	conn     net.Conn
+	UserName string
+	In       chan string
+	Out      chan *Guess
+}
+
+func (us *UserSession) Start() {
+	fromUser := make(chan string)
+	go func(fromUser chan string) {
+		msg, _ := bufio.NewReader(us.conn).ReadString('\n')
+		fromUser <- msg
+	}(fromUser)
+
+	for {
+		select {
+		case <-us.ctx.Done():
+			return
+		case msg := <-fromUser:
+			if us.UserName == "" && msg != "" {
+				us.UserName = msg
+			}
+			if us.UserName != "" && msg != "" {
+				us.Out <- &Guess{UserName: us.UserName, ImageName: msg}
+			}
+		case toUser := <-us.In:
+			us.conn.Write([]byte(toUser + "\n"))
+		}
+
+	}
+}
+
+type Server struct {
+	ctx          context.Context
+	Address      string
+	ImagesPath   string
+	UserSessions []*UserSession
+	fromUsers    chan *Guess
+	toUsers      chan string
+}
+
+//Waits for users and start when there is at least one
+func (s *Server) MustWaitAndStartGame() {
+	conf := GameConfig{
+		ImagesPath: s.ImagesPath,
+		TickPeriod: 1000, // 1 sec
+	}
+	game, err := NewGame(conf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	toGame := make(chan *Guess)
+	fromGame := make(chan string)
+
+	gameSession, err := game.NewSession(s.ctx, toGame, fromGame)
+	for {
+		for _, us := range s.UserSessions {
+			if us.UserName != "" {
+				break
+			}
+		}
+		time.Sleep(1 * time.Second)
+	}
+	go gameSession.Start()
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case guess := <-s.fromUsers:
+			if guess.ImageName != gameSession.Image.Name {
+				s.UserSendMsg(guess.UserName, fmt.Sprintf(WRONG_GUESS_TMPL, guess.ImageName))
+			} else {
+				gameSession.In <- guess
+			}
+		case msg := <-gameSession.Out:
+			for _, us := range s.UserSessions {
+				us.In <- msg
+			}
+		}
+	}
+}
+
+func (s *Server) UserSendMsg(userName, imageName string) {
+
+}
+func (s *Server) Start(ctx context.Context) error {
+	ln, err := net.Listen("tcp", s.Address)
+	if err != nil {
+		return err
+	}
+	defer ln.Close()
+	go s.MustWaitAndStartGame()
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+		toUser := make(chan string)
+		us := &UserSession{
+			ctx:  ctx,
+			conn: conn,
+			Out:  s.fromUsers,
+			In:   toUser,
+		}
+		go us.Start()
+		s.UserSessions = append(s.UserSessions, us)
+		us.In <- "Welcome to Ascii drawing!"
+		us.In <- "Please, enter your name:"
+	}
+
+}
+
+func NewServer(address, path string) *Server {
+	toUsers := make(chan string)
+	fromUsers := make(chan *Guess)
+	return &Server{
+		ctx:        context.Background(),
+		Address:    address,
+		ImagesPath: path,
+		toUsers:    toUsers,
+		fromUsers:  fromUsers,
 	}
 }
