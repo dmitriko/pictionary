@@ -88,7 +88,7 @@ func (p *Player) Communicate(ctx context.Context, toGame chan *UserMsg) {
 		case <-p.Done:
 			return
 		case msg := <-p.From:
-			if p.Name == "" { // If text recived my name is not set assumes it is name
+			if p.Name == "" { // If text recived but name is not set yet it assumes we got the name
 				p.Name = strings.TrimSpace(msg)
 			} else { // else send it to game's channel
 				toGame <- &UserMsg{UserID: p.ID, Text: msg}
@@ -113,7 +113,7 @@ type Game struct {
 	sync.Mutex
 }
 
-// Creates new Game for give path to images dir and period to wait before sending next line in millisecond
+// Creates new Game for given path to images dir and period to wait before sending next line in millisecond
 func NewGame(ctx context.Context, imagesPath string, tickPeriod int) (*Game, error) {
 	g := &Game{
 		ctx:        ctx,
