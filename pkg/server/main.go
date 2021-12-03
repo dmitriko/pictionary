@@ -2,6 +2,7 @@ package server
 
 import (
 	"io/ioutil"
+	"net"
 	"path/filepath"
 	"strings"
 )
@@ -23,9 +24,15 @@ type Image struct {
 	Lines []string
 }
 
+type Player struct {
+	conn net.Conn
+	Name string
+}
+
 type Game struct {
-	conf   GameConfig
-	Images []*Image
+	conf    GameConfig
+	Images  []*Image
+	Players map[string]*Player
 }
 
 func NewGame(conf GameConfig) (*Game, error) {
