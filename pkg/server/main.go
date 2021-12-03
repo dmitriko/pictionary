@@ -3,10 +3,12 @@ package server
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net"
 	"path/filepath"
 	"strings"
@@ -17,10 +19,10 @@ import (
 )
 
 const (
-	NOBODY_WON_TMPL  = "Nobody won. It was %s."
-	LAST_LINE        = "Game ended!"
-	WINNER_TMPL      = "Player %s is the winner! The correct guess: %s."
-	WRONG_GUESS_TMPL = "Wrong guess: %s."
+	NOBODY_WON_TMPL = "Nobody won. It was %s."
+	LAST_LINE       = "Game ended!"
+	WINNER_TMPL     = "Player %s is the winner! The correct guess: %s."
+	WRONG_TMPL      = "Wrong guess: %s."
 )
 
 type Image struct {
@@ -84,7 +86,11 @@ func (p *Player) Communicate(ctx context.Context, toGame chan *UserMsg) {
 		case <-p.Done:
 			return
 		case msg := <-p.From:
-			toGame <- &UserMsg{UserID: p.ID, Text: msg}
+			if p.Name == "" {
+				p.Name = strings.TrimSpace(msg)
+			} else {
+				toGame <- &UserMsg{UserID: p.ID, Text: msg}
+			}
 		case <-ctx.Done():
 			return
 		}
@@ -114,6 +120,14 @@ func NewGame(ctx context.Context, imagesPath string, tickPeriod int) (*Game, err
 		Players:    map[string]*Player{},
 	}
 	err := g.LoadImages()
+	if err != nil {
+		return nil, err
+	}
+	if len(g.Images) == 0 {
+		return nil, errors.New("Empty images folder.")
+	}
+	rand.Seed(time.Now().Unix())
+	g.currImage = g.Images[rand.Intn(len(g.Images))]
 	if err != nil {
 		return g, err
 	}
@@ -169,18 +183,17 @@ func (g *Game) handleUserMsg(msg *UserMsg) {
 		return
 	}
 	text := strings.TrimSpace(msg.Text)
-	if player.Name == "" {
-		player.Name = text
-		return
-	}
 	if text == g.currImage.Name {
 		g.sendTextAllPlayers(fmt.Sprintf(WINNER_TMPL, player.Name, g.currImage.Name))
 		g.Done = true
+	} else {
+		player.To <- fmt.Sprintf(WRONG_TMPL, text)
 	}
 
 }
 
 func (g *Game) Stop() {
+	g.sendTextAllPlayers(LAST_LINE)
 	g.Done = true
 }
 
@@ -189,7 +202,7 @@ func (g *Game) NobodyWon() {
 }
 
 func (g *Game) sendNextLine() {
-	if len(g.currImage.Lines) < g.currLine {
+	if len(g.currImage.Lines) > g.currLine {
 		g.sendTextAllPlayers(g.currImage.Lines[g.currLine])
 		g.currLine++
 	}
