@@ -1,22 +1,18 @@
 package server
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewGame(t *testing.T) {
-	conf := GameConfig{
-		ImagesPath: "test_data/asciiImages",
-		TickPeriod: 1,
-	}
-	g, err := NewGame(conf)
+	g, err := NewGame(context.Background(), "test_data/asciiImages", 1)
 	assert.Nil(t, err)
 	assert.Equal(t, 4, len(g.Images))
 	assert.Equal(t, "camel", g.Images[0].Name)
 
-	badConf := GameConfig{"foo", 1}
-	_, err = NewGame(badConf)
+	_, err = NewGame(context.Background(), "foo", 1)
 	assert.NotNil(t, err)
 }
