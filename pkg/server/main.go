@@ -44,6 +44,7 @@ type UserMsg struct {
 	Text   string
 }
 
+//Creates new Player for net.Conn
 func NewPlayer(conn io.ReadWriteCloser) *Player {
 	return &Player{
 		conn: conn,
@@ -54,9 +55,10 @@ func NewPlayer(conn io.ReadWriteCloser) *Player {
 	}
 }
 
+// Sending/Receiving bytes to/from user
 func (p *Player) Communicate(ctx context.Context, toGame chan *UserMsg) {
 	defer p.conn.Close()
-	go func() {
+	go func() { // Reading from socket and sending to From channel
 		for {
 			msg, err := bufio.NewReader(p.conn).ReadString('\n')
 			if err != nil {
@@ -65,7 +67,7 @@ func (p *Player) Communicate(ctx context.Context, toGame chan *UserMsg) {
 			p.From <- msg
 		}
 	}()
-	go func() {
+	go func() { // Sending to socket text received via To channel
 		for {
 			select {
 			case msg := <-p.To:
@@ -86,9 +88,9 @@ func (p *Player) Communicate(ctx context.Context, toGame chan *UserMsg) {
 		case <-p.Done:
 			return
 		case msg := <-p.From:
-			if p.Name == "" {
+			if p.Name == "" { // If text recived my name is not set assumes it is name
 				p.Name = strings.TrimSpace(msg)
-			} else {
+			} else { // else send it to game's channel
 				toGame <- &UserMsg{UserID: p.ID, Text: msg}
 			}
 		case <-ctx.Done():
@@ -111,6 +113,7 @@ type Game struct {
 	sync.Mutex
 }
 
+// Creates new Game for give path to images dir and period to wait before sending next line in millisecond
 func NewGame(ctx context.Context, imagesPath string, tickPeriod int) (*Game, error) {
 	g := &Game{
 		ctx:        ctx,
@@ -155,6 +158,8 @@ func (g *Game) LoadImages() error {
 	return nil
 }
 
+// Handles new tcp socket conntection
+// Adds Player record into map, starts communication
 func (g *Game) HandleConn(conn io.ReadWriteCloser) {
 	log.Print("User connected")
 	player := NewPlayer(conn)
@@ -166,6 +171,8 @@ func (g *Game) HandleConn(conn io.ReadWriteCloser) {
 	player.To <- "Please, enter your name:"
 }
 
+// Checks if there at least one player with name set
+// wait 1 sec othervise and check again
 func waitUserWithName(players map[string]*Player) {
 	for {
 		for _, player := range players {
@@ -177,6 +184,7 @@ func waitUserWithName(players map[string]*Player) {
 	}
 }
 
+// Checks is user sent correct guess
 func (g *Game) handleUserMsg(msg *UserMsg) {
 	player, exists := g.Players[msg.UserID]
 	if !exists {
